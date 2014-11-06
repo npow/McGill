@@ -1,17 +1,18 @@
 from __future__ import division
 import numpy as np
+import matplotlib.pyplot as plt
 import re
 from itertools import combinations
 from sklearn.cross_validation import LeaveOneOut
 
-def get_pwm(L):
-    H = {'A': [0]*6, 'C': [0]*6, 'T': [0]*6, 'G': [0]*6}
+def get_pwm(L, ALPHA):
+    H = {'A': [ALPHA]*6, 'C': [ALPHA]*6, 'T': [ALPHA]*6, 'G': [ALPHA]*6}
     for i in xrange(6):
         for seq in L:
             H[seq[i]][i] += 1
     for h in H:
         for i in xrange(6):
-            H[h][i] /= len(L)
+            H[h][i] /= len(L) + 4*ALPHA
     return H
 
 def f(H, seq):
@@ -27,18 +28,17 @@ def load_file(file_name):
         L.append(line.strip())
     return L
 
-def main(dataset):
-    print "dataset%d" % dataset
+def main(dataset, alpha):
     pos = np.array(load_file('data/dataset%d/positive.txt' % dataset))
     neg = np.array(load_file('data/dataset%d/negative.txt' % dataset))
 
     loo = LeaveOneOut(len(pos))
     pos_proba = []
     for train, test in loo:
-        H = get_pwm(pos[train])
+        H = get_pwm(pos[train], alpha)
         p = f(H, pos[test][0])
         pos_proba.append(p)
-    H = get_pwm(pos)
+    H = get_pwm(pos, alpha)
     neg_proba = []
     for seq in neg:
         p = f(H, seq)
@@ -47,21 +47,40 @@ def main(dataset):
     min_errors = float('inf')
     best = (0, 0)
     best_thresh = None
-    for t in xrange(0, 10001):
-        threshold = t / 10000.0
-        TP = len(filter(lambda x: x > threshold, pos_proba))
-        TN = len(filter(lambda x: x <= threshold, neg_proba))
+    thresholds = []
+    sensitivities = []
+    specificities = []
+    for threshold in sorted([0, 1] + pos_proba + neg_proba):
+        TP = len(filter(lambda x: x >= threshold, pos_proba))
+        TN = len(filter(lambda x: x < threshold, neg_proba))
         FP = len(pos) - TP
         FN = len(neg) - TN
+        thresholds.append(threshold)
+        sensitivities.append(TP/len(pos))
+        specificities.append(TN/len(neg))
         if FP + FN < min_errors:
             min_errors = FP + FN
             best = (TP, TN)
             best_thresh = threshold
 
+    print "*" * 80
+    print "dataset%d" % dataset
+    print "alpha: %d" % alpha
     print "threshold: %f" % best_thresh
     print "sensitivity: %f" % (best[0]/len(pos))
     print "specificity: %f" % (best[1]/len(neg))
+    plt.plot(thresholds, sensitivities, color='r', label='Sensitivity')
+    plt.plot(thresholds, specificities, color='b', label='Specificity')
+    plt.xscale('log')
+    plt.xlabel('Threshold')
+    plt.ylabel('Accuracy (%)')
+    plt.title('dataset%d' % dataset)
+    plt.legend()
+    plt.savefig('plots/ss%s_dataset%d' % ('' if alpha == 0 else '_smooth', dataset))
+    plt.clf()
 
 if __name__ == '__main__':
-    main(1)
-    main(2)
+    main(1, alpha=0)
+    main(2, alpha=0)
+    main(1, alpha=1)
+    main(2, alpha=1)
