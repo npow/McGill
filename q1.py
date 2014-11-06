@@ -21,7 +21,7 @@ f.close()
 L = ['A', 'C', 'G', 'T', '[AC]', '[AG]', '[AT]', '[CG]', '[CT]', '[GT]', '[ACGT]']
 H_pos = {}
 H_neg = {}
-for i, p in enumerate(permutations(L)):
+for i, p in enumerate(permutations(L, 6)):
     if i % 1000 == 0:
         print i
     patt = ''.join(p)
