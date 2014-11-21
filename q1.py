@@ -64,25 +64,25 @@ for w in sorted(Z, key=Z.get, reverse=True)[:20]:
     print "%20s" % w, '%10.4f ' % H_pos[w], '%10.4f ' % Z[w], '%10.4f ' % H_neg[w], '%10.4f ' % get_zscore(w, neg, H_neg)
 
 """
-      T GT AG CT G C 		13 	8.1815 	5 	-0.7119
-      T G AG CT GT C 		12 	7.4474 	6 	-0.3302
-       T G A CT AG C 		8 	7.3425 	4 	0.3062
-     GT CG AG CT G C 		17 	6.8985 	20 	1.6920
-   GT CT AT A ACGT T 		26 	6.8194 	55 	5.2552
-      T CG AG CT G C 		11 	6.7133 	3 	-1.4752
-      T GT AG AC G C 		11 	6.7133 	6 	-0.3302
-      T G AG C GT CT 		11 	6.7133 	4 	-1.0935
-      T G AG CT CG C 		11 	6.7133 	2 	-1.8568
-   T GT AT A ACGT CT 		25 	6.4523 	67 	7.5452
-   A AT ACGT CT GT T 		25 	6.4523 	72 	8.4993
-     GT T AG AC AT A 		16 	6.3794 	24 	2.7715
-     GT CT AT A AG T 		16 	6.3794 	31 	4.6606
-     GT CT AT A AC T 		16 	6.3794 	32 	4.9304
-    T GT AG ACGT G C 		16 	6.3794 	9 	-1.2766
-   T GT A AT ACGT CT 		24 	6.0853 	72 	8.4993
-   AT ACGT A CT GT T 		24 	6.0853 	66 	7.3543
-   T CT AT A ACGT GT 		24 	6.0853 	62 	6.5910
-   CT AT ACGT T GT A 		24 	6.0853 	57 	5.6369
-      T G AG AC GT C 		10 	5.9791 	4 	-1.0935
+        PATTERN         POS_COUNT  POS_ZSCORE  NEG_COUNT   NEG_ZSCORE
+         G C G C G C     6.0000     11.9770     16.0000     16.3454
+         C G C G C G     6.0000     11.9770     16.0000     16.3454
+        AT A A A A A     8.0000     11.0650     11.0000      7.0864
+        T G AG C G C     8.0000     11.0650      1.0000     -0.5468
+       T G AG CT G C    11.0000     10.4572      2.0000     -0.7732
+      T GT A A AT AT    15.0000      9.6498     35.0000     10.7378
+        G C G C CG C     7.0000      9.5967     16.0000     10.9029
+        AG C G C G C     7.0000      9.5967     17.0000     11.6662
+        C G C G C GT     7.0000      9.5967     17.0000     11.6662
+        C G C CG C G     7.0000      9.5967     16.0000     10.9029
+       T T A A AT AT    10.0000      9.4190     23.0000     10.5614
+       AG C G C CG C    10.0000      9.4190     17.0000      7.3229
+       GT CG G C G C    10.0000      9.4190     17.0000      7.3229
+     T T AT AG AT AT    21.0000      8.9749     61.0000     12.7567
+      T T AT AG T AT    14.0000      8.9157     30.0000      8.8295
+      A AT AT T CG T    14.0000      8.9157     22.0000      5.7763
+      T GT AT A AT T    14.0000      8.9157     35.0000     10.7378
+      A AT AT T GT T    14.0000      8.9157     31.0000      9.2112
+      GT CG AG C G C    14.0000      8.9157     17.0000      3.8680
+    T GT AT A ACGT T    20.0000      8.4558     49.0000      9.5182
 """
-# CGCGCG 11.977 z-score
