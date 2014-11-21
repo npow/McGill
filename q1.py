@@ -2,7 +2,7 @@ from __future__ import division
 import math
 import re
 import sys
-from itertools import permutations
+from itertools import product
 from sklearn.externals import joblib
 
 def load_file(file_name):
@@ -22,7 +22,7 @@ if DUMP_DATA:
     L = ['A', 'C', 'G', 'T', '[AC]', '[AG]', '[AT]', '[CG]', '[CT]', '[GT]', '[ACGT]']
     H_pos = {}
     H_neg = {}
-    for i, p in enumerate(permutations(L, 6)):
+    for i, p in enumerate(product(L, repeat=6)):
         if i % 1000 == 0:
             print i
         patt = ''.join(p)
@@ -59,8 +59,9 @@ for p in H_pos:
     zscore = get_zscore(p, pos, H_pos)
     Z[p] = zscore
 
+print "          PATTERN \t POS_COUNT \t POS_ZSCORE \t NEG_COUNT \t NEG_ZSCORE"
 for w in sorted(Z, key=Z.get, reverse=True)[:20]:
-  print "%20s" % w, '\t\t', H_pos[w], '\t', "%0.4f" % Z[w], '\t', H_neg[w], '\t', "%0.4f" % get_zscore(w, neg, H_neg)
+    print "%20s" % w, '%10.4f ' % H_pos[w], '%10.4f ' % Z[w], '%10.4f ' % H_neg[w], '%10.4f ' % get_zscore(w, neg, H_neg)
 
 """
       T GT AG CT G C 		13 	8.1815 	5 	-0.7119
@@ -84,3 +85,4 @@ for w in sorted(Z, key=Z.get, reverse=True)[:20]:
    CT AT ACGT T GT A 		24 	6.0853 	57 	5.6369
       T G AG AC GT C 		10 	5.9791 	4 	-1.0935
 """
+# CGCGCG 11.977 z-score
