@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import re
 from itertools import combinations
 from sklearn.cross_validation import LeaveOneOut
+from sklearn import metrics
 
 def get_pwm(L, ALPHA):
     H = {'A': [ALPHA]*6, 'C': [ALPHA]*6, 'T': [ALPHA]*6, 'G': [ALPHA]*6}
@@ -69,12 +70,13 @@ def main(dataset, alpha):
     print "threshold: %f" % best_thresh
     print "sensitivity: %f" % (best[0]/len(pos))
     print "specificity: %f" % (best[1]/len(neg))
-    plt.plot(thresholds, sensitivities, color='r', label='Sensitivity')
-    plt.plot(thresholds, specificities, color='b', label='Specificity')
-    plt.xscale('log')
-    plt.xlabel('Threshold')
-    plt.ylabel('Accuracy (%)')
-    plt.title('dataset%d' % dataset)
+    auc = metrics.auc(sensitivities, specificities, reorder=True)
+    print "auc: %f" % auc
+    plt.plot(sensitivities, specificities, linewidth=4)
+    #plt.xscale('log')
+    plt.xlabel('Sensitivity')
+    plt.ylabel('Specificity')
+    plt.title('Sensitivity-Specificity, dataset%d. AUC: %f' % (dataset, auc))
     plt.legend()
     plt.savefig('plots/ss%s_dataset%d' % ('' if alpha == 0 else '_smooth', dataset))
     plt.clf()
