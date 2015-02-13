@@ -10,7 +10,7 @@ else
 CXX = g++-4.9
 endif
 
-CXX_FLAGS=-I. -std=c++0x -MMD -O3 -DNDEBUG
+CXX_FLAGS=-I. -std=c++0x -MMD -O2
 LD_FLAGS =
 
 SRCS := $(wildcard *.cpp)

@@ -1,8 +1,9 @@
+#include <cassert>
 #include <cmath>
 #include <cstring>
 #include <iostream>
 #include <limits>
-#include <unordered_map>
+#include <map>
 #include <sstream>
 #include <getopt.h>
 using namespace std;
@@ -55,7 +56,8 @@ struct State {
            (abs(u-rhs.u) < 10e-8);
   }
   double getReward() const {
-    return -1 * o*E3 + oi*E1 + ci*E2 + w*W * r*P;
+    double reward = o*E3 + oi*(E1+E3) + ci*E2 + w*W * r*P;
+    return -reward;
   }
 
   int o; // open
@@ -68,7 +70,7 @@ struct State {
   string hash;
 };
 
-typedef unordered_map<string, State> StateMap_t;
+typedef map<string, State> StateMap_t;
 StateMap_t stateMap;
 
 void populateStates() {
@@ -78,7 +80,17 @@ void populateStates() {
         for (int numClosing = 0; numClosing <= M; ++numClosing) {
           for (int numWaiting = 0; numWaiting <= N; ++numWaiting) {
             for (int numRejected = 0; numRejected <= maxRejected; ++numRejected) {
-              if (numOpen + numOpening + numClosed + numClosing > M) continue;
+              if (numOpen + numOpening + numClosed + numClosing != M) continue;
+              if (numWaiting != N && numRejected > 0) continue; // only reject if no seats left
+#if 0
+              double p = 0;
+              if (isNormal) {
+                p = normal_pmf(numWaiting+numRejected, mu, sigma);
+              } else {
+                p = poisson_pmf(numWaiting+numRejected, lambda);
+              }
+              if (p < 0.001) continue;
+#endif
               State s(numOpen, numOpening, numClosed, numClosing, numWaiting, numRejected);
               stateMap[s.hash] = s; 
             }
@@ -89,11 +101,13 @@ void populateStates() {
   }
 }
 
-double getBestExpectedUtility(const State& s) {
+bool foo = false;
+
+double getBestExpectedUtility(const State& s, string& bestPolicy) {
   double bestUtility = -std::numeric_limits<double>::max();
-  for (int closed = 0; closed <= M; ++closed) {
-    for (int opened = 0; opened <= M; ++opened) {
-      if (closed < s.o || opened > s.c) continue;
+//  cout << "s: " << s.hash << endl;
+  for (int closing = 0; closing <= s.o + s.oi; ++closing) {
+    for (int opening = 0; opening <= s.c + s.ci; ++opening) {
       int numAvailRooms = s.o + s.oi - s.w;
       int numLeftoverPatients = 0;
       if (numAvailRooms < 0) {
@@ -101,7 +115,7 @@ double getBestExpectedUtility(const State& s) {
         numAvailRooms = 0;
       }
       const int numAvailSeats = N - numLeftoverPatients;
-      for (int i = 0; i <= numAvailSeats+maxRejected; ++i) {
+      for (int i = 0; i <= numAvailRooms+numAvailSeats+maxRejected; ++i) {
         double p = 0;
         if (isNormal) {
           p = normal_pmf(i, mu, sigma);
@@ -110,42 +124,71 @@ double getBestExpectedUtility(const State& s) {
         }
         if (p < 0.001) continue;
 
-        const int r = (i > numAvailSeats ? i-numAvailSeats : i);
-        const int w = (r > 0 ? numAvailSeats : i);
-        State s1(numAvailRooms, opened, s.c+s.ci, closed, w, r);
+        int w = 0;
+        int r = 0;
+        if (numAvailRooms < i) {
+          w = i - numAvailRooms;
+          if (numAvailSeats < w) {
+            r = w - numAvailSeats;
+            w = numAvailSeats;
+          } else {
+            // have enough seats
+          }
+        } else {
+          // have enough rooms
+        }
+        w += numLeftoverPatients;
+        State s1(s.o+s.oi-closing, opening, s.c+s.ci-opening, closing, w, r);
         if (stateMap.find(s1.hash) == stateMap.end()) {
           continue;
         }
-        bestUtility = max(bestUtility, p*s1.getReward());
+#if 0
+        cout << "\t" << "s.w: " << s.w << " leftover: " << numLeftoverPatients << " navailrooms: " << numAvailRooms << " closing: " << closing << " opening: " << opening << " i: " << i << " r: " << r << " w: " << w <<  " " << s1.hash << " util: " << (p*s1.getReward()) << " reward: " << s1.getReward() << " p: " << p << endl;
+#endif
+//        if (p*s1.u != 0) cout << p*s1.u << " best: " << bestUtility << endl;
+
+//        if (foo) cout << s1.hash << " " << (p*s1.u) << endl;
+        if (p*s1.u > bestUtility) {
+          bestUtility = p*s1.u;
+          stringstream ss;
+          ss << "open: " << opening << " close: " << closing;
+          bestPolicy = ss.str();
+        }
       }
     }
   }
+//  if (bestUtility == -std::numeric_limits<double>::max()) cout << "TERMINAL: " << s.hash << endl;
   return bestUtility;
+}
+
+void policyIteration() {
+
 }
 
 void valueIteration() {
   int nIter = 0;
   while (true) {
     StateMap_t tmp;
-    int i = 0;
     for (const auto& p : stateMap) {
       State s = p.second; // copy
-      s.u = s.getReward() + getBestExpectedUtility(s);
+      string str = "";
+      s.u = s.getReward() + getBestExpectedUtility(s, str);
+//      if (s.u == 0) cout << "WTF: " <<s.hash << " " << s.getReward() << " " << getBestExpectedUtility(s, str) << endl;
+//      cout << "utility: " << s.u << endl;
       tmp[s.hash] = s;
-      ++i;
-      if (i % 10000 == 0) 
-        cout << "i: " << i << endl;
     }
+#if 0
     int j = 0;
-    for (const auto& p : stateMap) {
+    for (const auto& p : tmp) {
       j++;
-      if (j < 10) break;
-      cout << j << ": " << p.second.u << endl;
+      if (j > 100) break;
+      cout << p.second.hash << ": " << p.second.u << endl;
     }
+#endif
     if (stateMap == tmp) break;
     stateMap = tmp; // copy
     nIter++;
-    cout << nIter << endl;
+    cout << "iter: " << nIter << endl;
   }
 }
 
@@ -160,11 +203,13 @@ int main(int argc, char* const argv[]) {
     { "W", 1, 0, 'W' },
     { "P", 1, 0, 'P' },
     { "dist", 1, 0, 'D' },
+    { "iter", 1, 0, 'I' },
     { "lambda", 1, 0, 'l' },
     { "mu", 1, 0, 'm' },
     { "sigma", 1, 0, 's' },
     { 0, 0, 0, 0 }
   };
+  bool isValue = true;
   char c = '\0';
   int index = 0;
   while ((c = getopt_long(argc, argv, "hN:M:E:F:G:W:P:D:l:m:s:", longopts, &index)) != -1) {
@@ -174,30 +219,38 @@ int main(int argc, char* const argv[]) {
         for (int i = 0; longopts[i].name; ++i) {
           const string name = longopts[i].name;
           const string val = name == "dist" ? "<normal|poisson>" :
+                             name == "iter" ? "<value|policy>" :
                              name == "help" ? "" : "<value>";
           cout << "\t--" << longopts[i].name << " " << val << endl;
         }
         return 0;
       case 'N':
         N = atoi(optarg);
+        assert(N > 0);
         break;
       case 'M':
         M = atoi(optarg);
+        assert(M > 0);
         break;
       case 'E':
         E1 = atof(optarg);
+        assert(E1 >= 0);
         break;
       case 'F':
         E2 = atof(optarg);
+        assert(E2 >= 0);
         break;
       case 'G':
         E3 = atof(optarg);
+        assert(E3 >= 0);
         break;
       case 'W':
         W = atof(optarg);
+        assert(W >= 0);
         break;
       case 'P':
         P = atof(optarg);
+        assert(P >= 0);
         break;
       case 'D':
         isNormal = strcmp("normal", optarg) == 0;
@@ -206,14 +259,24 @@ int main(int argc, char* const argv[]) {
           return -1;
         }
         break;
+      case 'I':
+        isValue = strcmp("value", optarg) == 0;
+        if (!isValue && strcmp("policy", optarg) != 0) {
+          cerr << "Error: iter must be either 'value' or 'policy'" << endl;
+          return -1;
+        }
+        break;
       case 'l':
         lambda = atof(optarg);
+        assert(lambda >= 0);
         break;
       case 'm':
         mu = atof(optarg);
+        assert(mu >= 0);
         break;
       case 's':
         sigma = atof(optarg);
+        assert(sigma >= 0);
         break;
     }
   }
@@ -246,6 +309,29 @@ int main(int argc, char* const argv[]) {
   cout << "maxRejected: " << maxRejected << endl;
   populateStates();
   cout << "numStates: " << stateMap.size() << endl;
-  valueIteration();
+  if (isValue) {
+    valueIteration();
+  } else {
+    policyIteration();
+  }
+
+  cout << "Converged! Enter a state to view the optimal policy." << endl
+       << "eg. <open_rooms> <opening_rooms> <closed_rooms> <closing_rooms> <num_waiting> <num_rejected>" << endl;
+  string str;
+  foo = true;
+  while (getline(cin, str)) {
+    if (str.empty()) continue;
+    stringstream ss(str);
+    int o, oi, c, ci, w, r;
+    ss >> o >> oi >> c >> ci >> w >> r;
+    State s(o, oi, c, ci, w, r);
+    if (stateMap.find(s.hash) == stateMap.end()) {
+      cout << "Error! Invalid state: " << str << endl;
+    } else {
+      string bestPolicy;
+      double d = getBestExpectedUtility(s, bestPolicy);
+      cout << s.hash << " " << d << " " << bestPolicy << endl;
+    }
+  }
   return 0;
 }
