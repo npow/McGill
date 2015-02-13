@@ -19,6 +19,7 @@ bool isNormal = false;
 double lambda = -1;
 double mu = -1;
 double sigma = -1;
+double discountFactor = 0.9;
 int maxRejected = 0;
 
 double normal_pmf(double x, double m, double s) {
@@ -33,7 +34,7 @@ double poisson_pmf(const double k, const double l) {
 
 string getHash(const int o, const int oi, const int c, const int ci, const int w, const int r) {
   stringstream ss;
-  ss << o << "|" << oi << "|" << c << "|" << ci << "|" << w << "|" << r;
+  ss << o << " " << oi << " " << c << " " << ci << " " << w << " " << r;
   return ss.str();
 }
 
@@ -101,11 +102,8 @@ void populateStates() {
   }
 }
 
-bool foo = false;
-
 double getBestExpectedUtility(const State& s, string& bestPolicy) {
   double bestUtility = -std::numeric_limits<double>::max();
-//  cout << "s: " << s.hash << endl;
   for (int closing = 0; closing <= s.o + s.oi; ++closing) {
     for (int opening = 0; opening <= s.c + s.ci; ++opening) {
       int numAvailRooms = s.o + s.oi - s.w;
@@ -115,6 +113,7 @@ double getBestExpectedUtility(const State& s, string& bestPolicy) {
         numAvailRooms = 0;
       }
       const int numAvailSeats = N - numLeftoverPatients;
+      double currUtility = 0.0;
       for (int i = 0; i <= numAvailRooms+numAvailSeats+maxRejected; ++i) {
         double p = 0;
         if (isNormal) {
@@ -138,26 +137,22 @@ double getBestExpectedUtility(const State& s, string& bestPolicy) {
           // have enough rooms
         }
         w += numLeftoverPatients;
-        State s1(s.o+s.oi-closing, opening, s.c+s.ci-opening, closing, w, r);
-        if (stateMap.find(s1.hash) == stateMap.end()) {
+        const string hash = getHash(s.o+s.oi-closing, opening, s.c+s.ci-opening, closing, w, r);
+        const auto& it = stateMap.find(hash);
+        if (it == stateMap.end()) {
           continue;
         }
-#if 0
-        cout << "\t" << "s.w: " << s.w << " leftover: " << numLeftoverPatients << " navailrooms: " << numAvailRooms << " closing: " << closing << " opening: " << opening << " i: " << i << " r: " << r << " w: " << w <<  " " << s1.hash << " util: " << (p*s1.getReward()) << " reward: " << s1.getReward() << " p: " << p << endl;
-#endif
-//        if (p*s1.u != 0) cout << p*s1.u << " best: " << bestUtility << endl;
+        currUtility += it->second.u * p;
+      }
 
-//        if (foo) cout << s1.hash << " " << (p*s1.u) << endl;
-        if (p*s1.u > bestUtility) {
-          bestUtility = p*s1.u;
-          stringstream ss;
-          ss << "open: " << opening << " close: " << closing;
-          bestPolicy = ss.str();
-        }
+      if (currUtility > bestUtility) {
+        bestUtility = currUtility;
+        stringstream ss;
+        ss << "OPEN=" << opening << " CLOSE=" << closing;
+        bestPolicy = ss.str();
       }
     }
   }
-//  if (bestUtility == -std::numeric_limits<double>::max()) cout << "TERMINAL: " << s.hash << endl;
   return bestUtility;
 }
 
@@ -172,9 +167,7 @@ void valueIteration() {
     for (const auto& p : stateMap) {
       State s = p.second; // copy
       string str = "";
-      s.u = s.getReward() + getBestExpectedUtility(s, str);
-//      if (s.u == 0) cout << "WTF: " <<s.hash << " " << s.getReward() << " " << getBestExpectedUtility(s, str) << endl;
-//      cout << "utility: " << s.u << endl;
+      s.u = s.getReward() + discountFactor * getBestExpectedUtility(s, str);
       tmp[s.hash] = s;
     }
 #if 0
@@ -207,6 +200,7 @@ int main(int argc, char* const argv[]) {
     { "lambda", 1, 0, 'l' },
     { "mu", 1, 0, 'm' },
     { "sigma", 1, 0, 's' },
+    { "gamma", 1, 0, 'f' },
     { 0, 0, 0, 0 }
   };
   bool isValue = true;
@@ -318,7 +312,6 @@ int main(int argc, char* const argv[]) {
   cout << "Converged! Enter a state to view the optimal policy." << endl
        << "eg. <open_rooms> <opening_rooms> <closed_rooms> <closing_rooms> <num_waiting> <num_rejected>" << endl;
   string str;
-  foo = true;
   while (getline(cin, str)) {
     if (str.empty()) continue;
     stringstream ss(str);
@@ -330,7 +323,7 @@ int main(int argc, char* const argv[]) {
     } else {
       string bestPolicy;
       double d = getBestExpectedUtility(s, bestPolicy);
-      cout << s.hash << " " << d << " " << bestPolicy << endl;
+      cout << s.hash << "utility: " << d << " policy: " << bestPolicy << endl;
     }
   }
   return 0;
