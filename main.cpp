@@ -1,10 +1,12 @@
 #include <cassert>
 #include <cmath>
 #include <cstring>
+#include <fstream>
 #include <iostream>
 #include <limits>
 #include <map>
 #include <sstream>
+#include <vector>
 #include <getopt.h>
 using namespace std;
 
@@ -19,29 +21,29 @@ bool isNormal = false;
 double lambda = -1;
 double mu = -1;
 double sigma = -1;
-double discountFactor = 0.9;
-int maxRejected = 0;
+double discountFactor = 1.0;
+int maxPeople = 0;
 
 double normal_pmf(double x, double m, double s) {
-    static const double inv_sqrt_2pi = 0.3989422804014327;
-    double a = (x - m) / s;
-    return inv_sqrt_2pi / s * exp(-0.5f * a * a);
+  static const double inv_sqrt_2pi = 0.3989422804014327;
+  double a = (x - m) / s;
+  return inv_sqrt_2pi / s * exp(-0.5f * a * a);
 }
 
 double poisson_pmf(const double k, const double l) {
   return exp(k * log(l) - lgamma(k + 1.0) - l);
 }
 
-string getHash(const int o, const int oi, const int c, const int ci, const int w, const int r) {
+string getHash(const int o, const int p) {
   stringstream ss;
-  ss << o << " " << oi << " " << c << " " << ci << " " << w << " " << r;
+  ss << o << " " << p;
   return ss.str();
 }
 
 struct State {
   State() {}
-  State(int o, int oi, int c, int ci, int w, int r) : o(o), oi(oi), c(c), ci(ci), w(w), r(r) {
-    hash = getHash(o, oi, c, ci, w, r);
+  State(int o, int p) : o(o), p(p) {
+    hash = getHash(o, p);
     u = 0;
   }
   bool operator<(const State& rhs) const {
@@ -49,24 +51,32 @@ struct State {
   }
   bool operator==(const State& rhs) const {
     return o == rhs.o &&
-           oi == rhs.oi &&
-           c == rhs.c &&
-           ci == rhs.ci &&
-           w == rhs.w &&
-           r == rhs.r &&
+           p == rhs.p &&
            (abs(u-rhs.u) < 10e-8);
   }
   double getReward() const {
-    double reward = o*E3 + oi*(E1+E3) + ci*E2 + w*W * r*P;
+    double reward = open()*E3 + waiting()*W + rejected()*P;
     return -reward;
   }
+  int open() const {
+    return o;
+  }
+  int closed() const {
+    return M-o;
+  }
+  int waiting() const {
+    int x = p > o ? (p-o > N ? N : p-o) : 0;
+    assert(x >= 0);
+    return x;
+  }
+  int rejected() const {
+    int x = p > N+o ? p-N-o : 0;
+    assert(x >= 0);
+    return x;
+  }
 
-  int o; // open
-  int oi; // opening
-  int c; // closed
-  int ci; // closing
-  int w; // waiting
-  int r; // rejected
+  int o; // open rooms
+  int p; // people that arrived
   double u; // utility
   string hash;
 };
@@ -75,82 +85,46 @@ typedef map<string, State> StateMap_t;
 StateMap_t stateMap;
 
 void populateStates() {
-  for (int numOpen = 0; numOpen <= M; ++numOpen) {
-    for (int numOpening = 0; numOpening <= M; ++numOpening) {
-      for (int numClosed = 0; numClosed <= M; ++numClosed) {
-        for (int numClosing = 0; numClosing <= M; ++numClosing) {
-          for (int numWaiting = 0; numWaiting <= N; ++numWaiting) {
-            for (int numRejected = 0; numRejected <= maxRejected; ++numRejected) {
-              if (numOpen + numOpening + numClosed + numClosing != M) continue;
-              if (numWaiting != N && numRejected > 0) continue; // only reject if no seats left
-#if 0
-              double p = 0;
-              if (isNormal) {
-                p = normal_pmf(numWaiting+numRejected, mu, sigma);
-              } else {
-                p = poisson_pmf(numWaiting+numRejected, lambda);
-              }
-              if (p < 0.001) continue;
-#endif
-              State s(numOpen, numOpening, numClosed, numClosing, numWaiting, numRejected);
-              stateMap[s.hash] = s; 
-            }
-          }
-        }
-      }
+  for (int o = 0; o <= M; ++o) {
+    for (int p = 0; p <= maxPeople; ++p) {
+      State s(o, p);
+      stateMap[s.hash] = s;
     }
   }
 }
 
 double getBestExpectedUtility(const State& s, string& bestPolicy) {
   double bestUtility = -std::numeric_limits<double>::max();
-  for (int closing = 0; closing <= s.o + s.oi; ++closing) {
-    for (int opening = 0; opening <= s.c + s.ci; ++opening) {
-      int numAvailRooms = s.o + s.oi - s.w;
-      int numLeftoverPatients = 0;
-      if (numAvailRooms < 0) {
-        numLeftoverPatients = abs(numAvailRooms);
-        numAvailRooms = 0;
+  for (int o = 0; o <= M; ++o) {
+    const int opening = o - s.o > 0 ? o - s.o : 0;
+    const int closing = o - s.o < 0 ? s.o - o : 0;
+    double currUtility = 0 -(E1+E3)*opening - E2*closing;
+    for (int p = 0; p <= maxPeople; ++p) {
+      double prob = 0;
+      if (isNormal) {
+        prob = normal_pmf(p, mu, sigma);
+      } else {
+        prob = poisson_pmf(p, lambda);
       }
-      const int numAvailSeats = N - numLeftoverPatients;
-      double currUtility = 0.0;
-      for (int i = 0; i <= numAvailRooms+numAvailSeats+maxRejected; ++i) {
-        double p = 0;
-        if (isNormal) {
-          p = normal_pmf(i, mu, sigma);
-        } else {
-          p = poisson_pmf(i, lambda);
-        }
-        if (p < 0.001) continue;
+      if (prob < 0.001) continue;
 
-        int w = 0;
-        int r = 0;
-        if (numAvailRooms < i) {
-          w = i - numAvailRooms;
-          if (numAvailSeats < w) {
-            r = w - numAvailSeats;
-            w = numAvailSeats;
-          } else {
-            // have enough seats
-          }
-        } else {
-          // have enough rooms
-        }
-        w += numLeftoverPatients;
-        const string hash = getHash(s.o+s.oi-closing, opening, s.c+s.ci-opening, closing, w, r);
-        const auto& it = stateMap.find(hash);
-        if (it == stateMap.end()) {
-          continue;
-        }
-        currUtility += it->second.u * p;
+      const string hash = getHash(o, p);
+      const auto& it = stateMap.find(hash);
+      assert(it != stateMap.end());
+      if (it == stateMap.end()) {
+        continue;
       }
+      const double pp = prob * (it->second.u);
+      assert(pp <= 0);
+      currUtility += pp;
+    }
+    assert(currUtility > -std::numeric_limits<double>::max());
 
-      if (currUtility > bestUtility) {
-        bestUtility = currUtility;
-        stringstream ss;
-        ss << "OPEN=" << opening << " CLOSE=" << closing;
-        bestPolicy = ss.str();
-      }
+    if (currUtility > bestUtility) {
+      bestUtility = currUtility;
+      stringstream ss;
+      ss << "OPEN=" << opening << " CLOSE=" << closing;
+      bestPolicy = ss.str();
     }
   }
   return bestUtility;
@@ -160,28 +134,38 @@ void policyIteration() {
 
 }
 
+vector<string> getPolicy(const StateMap_t& m) {
+  vector<string> v;
+  v.reserve(m.size());
+  for (const auto& p : m) {
+    string policy;
+    getBestExpectedUtility(p.second, policy);
+    v.push_back(policy);
+  }
+  return v;
+}
+
 void valueIteration() {
-  int nIter = 0;
+  int nIter = 1;
+  cout << " ";
   while (true) {
+    stringstream ss;
     StateMap_t tmp;
     for (const auto& p : stateMap) {
       State s = p.second; // copy
       string str = "";
-      s.u = s.getReward() + discountFactor * getBestExpectedUtility(s, str);
+      s.u = s.getReward() +  getBestExpectedUtility(s, str);
+      assert(s.u <= 0);
       tmp[s.hash] = s;
     }
-#if 0
-    int j = 0;
-    for (const auto& p : tmp) {
-      j++;
-      if (j > 100) break;
-      cout << p.second.hash << ": " << p.second.u << endl;
-    }
-#endif
     if (stateMap == tmp) break;
+    if (nIter > 2 && getPolicy(stateMap) == getPolicy(tmp)) {
+      cout << endl << "Policy unchanged!";
+      break;
+    }
     stateMap = tmp; // copy
     nIter++;
-    cout << "iter: " << nIter << endl;
+    cout << '\r' << "iter: " << nIter << flush;
   }
 }
 
@@ -206,7 +190,7 @@ int main(int argc, char* const argv[]) {
   bool isValue = true;
   char c = '\0';
   int index = 0;
-  while ((c = getopt_long(argc, argv, "hN:M:E:F:G:W:P:D:l:m:s:", longopts, &index)) != -1) {
+  while ((c = getopt_long(argc, argv, "hN:M:E:F:G:W:P:D:f:l:m:s:", longopts, &index)) != -1) {
     switch (c) {
       case 'h':
         cout << "Usage: " << argv[0] << endl;
@@ -260,6 +244,10 @@ int main(int argc, char* const argv[]) {
           return -1;
         }
         break;
+      case 'f':
+        discountFactor = atof(optarg);
+        assert(discountFactor < 1 && discountFactor >= 0);
+        break;
       case 'l':
         lambda = atof(optarg);
         assert(lambda >= 0);
@@ -288,19 +276,19 @@ int main(int argc, char* const argv[]) {
 
   if (isNormal) {
     for (int i = mu; ; ++i) {
-      double p = normal_pmf(i, mu, sigma);
-      if (p < 0.001) break;
-      maxRejected = i;
+      double prob = normal_pmf(i, mu, sigma);
+      if (prob < 0.001) break;
+      maxPeople = i;
     }
   } else {
     for (int i = lambda; ; ++i) {
-      double p = poisson_pmf(i, lambda);
-      if (p < 0.001) break;
-      maxRejected = i;
+      double prob = poisson_pmf(i, lambda);
+      if (prob < 0.001) break;
+      maxPeople = i;
     }
   }
 
-  cout << "maxRejected: " << maxRejected << endl;
+  cout << "maxPeople: " << maxPeople << endl;
   populateStates();
   cout << "numStates: " << stateMap.size() << endl;
   if (isValue) {
@@ -309,21 +297,21 @@ int main(int argc, char* const argv[]) {
     policyIteration();
   }
 
-  cout << "Converged! Enter a state to view the optimal policy." << endl
-       << "eg. <open_rooms> <opening_rooms> <closed_rooms> <closing_rooms> <num_waiting> <num_rejected>" << endl;
+  cout << endl << "Converged! Enter a state to view the optimal policy." << endl
+       << "eg. <open_rooms> <num_arriving_people>" << endl;
   string str;
   while (getline(cin, str)) {
     if (str.empty()) continue;
     stringstream ss(str);
-    int o, oi, c, ci, w, r;
-    ss >> o >> oi >> c >> ci >> w >> r;
-    State s(o, oi, c, ci, w, r);
+    int o, p;
+    ss >> o >> p;
+    State s(o, p);
     if (stateMap.find(s.hash) == stateMap.end()) {
       cout << "Error! Invalid state: " << str << endl;
     } else {
       string bestPolicy;
       double d = getBestExpectedUtility(s, bestPolicy);
-      cout << s.hash << "utility: " << d << " policy: " << bestPolicy << endl;
+      cout << "state: " << s.hash << ", utility: " << d << ", policy: " << bestPolicy << endl;
     }
   }
   return 0;
