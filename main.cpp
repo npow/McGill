@@ -21,7 +21,7 @@ bool isNormal = false;
 double lambda = -1;
 double mu = -1;
 double sigma = -1;
-double discountFactor = 1.0;
+double discountFactor = 0.9;
 int maxPeople = 0;
 
 double normal_pmf(double x, double m, double s) {
@@ -52,7 +52,7 @@ struct State {
   bool operator==(const State& rhs) const {
     return o == rhs.o &&
            p == rhs.p &&
-           (abs(u-rhs.u) < 10e-8);
+           (abs(u-rhs.u) < 0.01*(1-discountFactor)/discountFactor);
   }
   double getReward() const {
     double reward = open()*E3 + waiting()*W + rejected()*P;
@@ -154,15 +154,11 @@ void valueIteration() {
     for (const auto& p : stateMap) {
       State s = p.second; // copy
       string str = "";
-      s.u = s.getReward() +  getBestExpectedUtility(s, str);
+      s.u = s.getReward() + discountFactor * getBestExpectedUtility(s, str);
       assert(s.u <= 0);
       tmp[s.hash] = s;
     }
     if (stateMap == tmp) break;
-    if (nIter > 2 && getPolicy(stateMap) == getPolicy(tmp)) {
-      cout << endl << "Policy unchanged!";
-      break;
-    }
     stateMap = tmp; // copy
     nIter++;
     cout << '\r' << "iter: " << nIter << flush;
