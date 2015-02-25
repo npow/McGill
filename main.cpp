@@ -318,7 +318,6 @@ int main(int argc, char* const argv[]) {
     policyIteration();
   }
 
-  return 0;
   cout << endl << "Converged! Enter a state to view the optimal policy." << endl
        << "eg. <open_rooms> <num_arriving_people>" << endl;
   string str;
