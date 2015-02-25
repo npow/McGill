@@ -1,6 +1,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstring>
+#include <ctime>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -39,6 +40,20 @@ string getHash(const int o, const int p) {
   ss << o << " " << p;
   return ss.str();
 }
+
+class Timer {
+  public:
+    Timer() {
+      m_start = clock();
+    }
+    ~Timer() {
+      double duration = (clock() - m_start) / (double)CLOCKS_PER_SEC;
+      cout << "Time taken (s): " << duration << endl;
+    }
+
+  private:
+    clock_t m_start;
+};
 
 struct State {
   State() {}
@@ -137,7 +152,7 @@ void policyIteration() {
   int nIter = 1;
   unordered_map<string, int> currPolicy;
   for (const auto& p : stateMap) {
-    currPolicy[p.second.hash] = M; // initial policy
+    currPolicy[p.second.hash] = 0; // initial policy
   }
   while (true) {
     StateMap_t tmp;
